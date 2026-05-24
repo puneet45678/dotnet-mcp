@@ -1,0 +1,45 @@
+name: Plugin Validator
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**/plugin.json"
+
+jobs:
+  validate:
+    name: Validate plugin.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find changed plugin.json files
+        id: changed
+        uses: tj-actions/changed-files@v44
+        with:
+          files: "plugins/**/plugin.json"
+
+      - name: Validate schema
+        if: steps.changed.outputs.any_changed == 'true'
+        run: |
+          for file in ${{ steps.changed.outputs.all_changed_files }}; do
+            echo "Validating $file..."
+
+            # Required top-level fields
+            for field in name version description assembly tools; do
+              value=$(jq -r ".$field // empty" "$file")
+              if [ -z "$value" ]; then
+                echo "::error file=$file::Missing required field: $field"
+                exit 1
+              fi
+            done
+
+            # Each tool must have name and description
+            invalid=$(jq '[.tools[] | select(.name == null or .description == null)] | length' "$file")
+            if [ "$invalid" -gt 0 ]; then
+              echo "::error file=$file::Each tool must have 'name' and 'description'"
+              exit 1
+            fi
+
+            echo "$file is valid."
+          done

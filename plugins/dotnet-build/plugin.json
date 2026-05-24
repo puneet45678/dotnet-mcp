@@ -1,0 +1,24 @@
+{
+  "name": "dotnet-build",
+  "version": "0.1.0",
+  "description": "Build .NET projects and solutions, surface structured errors/warnings, list solution projects, and restore NuGet packages.",
+  "assembly": "./bin/DotnetMcp.Build.dll",
+  "tools": [
+    {
+      "name": "build_project",
+      "description": "Build a .NET project or solution and return structured errors and warnings."
+    },
+    {
+      "name": "list_projects",
+      "description": "List all projects in a .sln solution file with their paths."
+    },
+    {
+      "name": "restore_packages",
+      "description": "Restore NuGet packages for a project or solution."
+    },
+    {
+      "name": "get_build_errors",
+      "description": "Build and return only the structured list of errors/warnings."
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>DotnetMcp.Testing</PackageId>
+    <Description>dotnet-mcp plugin: run tests, list test cases, and get coverage reports</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\DotnetMcp.Core\DotnetMcp.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Copy output DLL to plugins/dotnet-test/bin/ so plugin.json needs no TFM or config path -->
+  <Target Name="CopyToPluginBin" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFolder="$(MSBuildProjectDirectory)\..\..\bin\"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

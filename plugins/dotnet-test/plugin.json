@@ -1,0 +1,20 @@
+{
+  "name": "dotnet-test",
+  "version": "0.1.0",
+  "description": "Run .NET tests, list test cases, and collect code coverage reports via Coverlet.",
+  "assembly": "./bin/DotnetMcp.Testing.dll",
+  "tools": [
+    {
+      "name": "run_tests",
+      "description": "Run dotnet test with optional filter. Returns pass/fail/skip counts and failure stack traces."
+    },
+    {
+      "name": "list_tests",
+      "description": "List all available test names in a project or solution without running them."
+    },
+    {
+      "name": "get_coverage",
+      "description": "Run tests with Coverlet and return code coverage percentages."
+    }
+  ]
+}

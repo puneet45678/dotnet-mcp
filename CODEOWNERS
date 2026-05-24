@@ -1,0 +1,11 @@
+# Global owners — review all PRs
+* @puneet45678
+
+# Core infrastructure
+/src/                    @puneet45678
+/Directory.Build.props   @puneet45678
+
+# Plugins
+/plugins/dotnet-test/    @puneet45678
+/plugins/dotnet-build/   @puneet45678
+/plugins/dotnet-ef/      @puneet45678

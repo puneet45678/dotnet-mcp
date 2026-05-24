@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <!-- net8.0 assemblies run on .NET 9+ via forward compatibility.
+         CI matrix tests against multiple runtimes. Add net9.0 here
+         once all contributors have the .NET 9 SDK installed. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>dotnet-mcp contributors</Authors>
+    <RepositoryUrl>https://github.com/YOUR_USERNAME/dotnet-mcp</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+</Project>

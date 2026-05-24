@@ -1,0 +1,32 @@
+{
+  "name": "dotnet-ef",
+  "version": "0.1.0",
+  "description": "Manage EF Core migrations (list, add, remove, apply, script) and inspect DbContext configuration.",
+  "assembly": "./bin/DotnetMcp.EF.dll",
+  "tools": [
+    {
+      "name": "ef_list_migrations",
+      "description": "List all EF Core migrations and their applied/pending status."
+    },
+    {
+      "name": "ef_add_migration",
+      "description": "Scaffold a new EF Core migration for pending model changes."
+    },
+    {
+      "name": "ef_remove_migration",
+      "description": "Remove the last unapplied EF Core migration."
+    },
+    {
+      "name": "ef_update_database",
+      "description": "Apply pending migrations to the database."
+    },
+    {
+      "name": "ef_script_migration",
+      "description": "Generate an idempotent SQL script for EF Core migrations."
+    },
+    {
+      "name": "ef_get_dbcontext_info",
+      "description": "List all DbContext classes and their provider/connection details."
+    }
+  ]
+}

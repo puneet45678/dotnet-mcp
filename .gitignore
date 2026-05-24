@@ -1,0 +1,28 @@
+# Build outputs
+bin/
+obj/
+artifacts/
+
+# But keep the plugin bin/ DLLs — these are the distributable artifacts
+!plugins/*/bin/
+!plugins/*/bin/*.dll
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# macOS
+.DS_Store

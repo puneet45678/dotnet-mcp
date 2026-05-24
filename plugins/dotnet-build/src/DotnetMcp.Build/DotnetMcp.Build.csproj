@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>DotnetMcp.Build</PackageId>
+    <Description>dotnet-mcp plugin: build projects, surface errors, and restore packages</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\DotnetMcp.Core\DotnetMcp.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Copy output DLL to plugins/dotnet-build/bin/ so plugin.json needs no TFM or config path -->
+  <Target Name="CopyToPluginBin" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFolder="$(MSBuildProjectDirectory)\..\..\bin\"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

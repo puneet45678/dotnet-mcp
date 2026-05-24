@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "dotnet-mcp": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "/Users/puneetgrover/dotnet-mcp/src/DotnetMcp.Host",
+        "--configuration",
+        "Release"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>DotnetMcp.Core</PackageId>
+    <Description>Shared models and utilities for dotnet-mcp plugins</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="0.3.*" />
+  </ItemGroup>
+
+</Project>

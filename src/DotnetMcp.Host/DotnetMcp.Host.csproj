@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackageId>DotnetMcp.Host</PackageId>
+    <Description>MCP server host that discovers and loads dotnet-mcp plugins</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DotnetMcp.Core\DotnetMcp.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="0.3.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.*" />
+  </ItemGroup>
+
+</Project>
