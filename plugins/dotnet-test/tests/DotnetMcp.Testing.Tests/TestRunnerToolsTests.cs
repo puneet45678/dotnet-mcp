@@ -113,13 +113,60 @@ public class TestRunnerToolsTests : PluginTestBase
     // ==========================================================================
 
     [Fact]
-    public async Task RunFailedTests_ProjectWithNoFailures_ReturnsSuccess()
+    public async Task RunFailedTests_AfterCleanRun_ReportsNoPreviousFailures()
     {
+        // Establish a clean baseline by running all tests first
         await TestRunnerTools.RunTests(SamplePath("SampleTestProject"));
+
         var result = await TestRunnerTools.RunFailedTests(SamplePath("SampleTestProject"));
 
-        Assert.True(result.Success || result.Total == 0);
-        Assert.Equal(0, result.Failed);
+        // With a clean previous run, either 0 failed tests or the tool reports NoPreviousFailures
+        Assert.True(
+            result.NoPreviousFailures || result.Failed == 0,
+            $"Expected no failures to re-run; got Failed={result.Failed}");
+    }
+
+    [Fact]
+    public async Task RunFailedTests_AfterFailingRun_ReRunsOnlyFailedTests()
+    {
+        // Establish a baseline with known failures
+        await TestRunnerTools.RunTests(SamplePath("SampleFailingProject"));
+
+        var result = await TestRunnerTools.RunFailedTests(SamplePath("SampleFailingProject"));
+
+        // Should have re-run the 2 failed tests and still report them as failed
+        Assert.True(result.Total > 0, "Expected failed tests to be re-run");
+        Assert.True(result.Failed >= 1, "Re-run of failing tests should still fail");
+        // Should NOT have re-run the 4 passing tests (total should be < 6)
+        Assert.True(result.Total < 6, $"Expected only failing tests to be re-run, got Total={result.Total}");
+    }
+
+    [Fact]
+    public async Task RunFailedTests_NoHistory_ReportsNoHistory()
+    {
+        // Copy SampleTestProject to a clean temp dir — deliberately skip TestResults/
+        // so there's no inherited TRX from earlier tests in this run.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-mcp-nohistory-{Guid.NewGuid():N}");
+        CopyDirectory(SamplePath("SampleTestProject"), tempDir, exclude: "TestResults");
+        try
+        {
+            var result = await TestRunnerTools.RunFailedTests(tempDir);
+            Assert.True(result.NoHistory, "Fresh project with no run history should set NoHistory=true");
+        }
+        finally { Directory.Delete(tempDir, recursive: true); }
+    }
+
+    // Copies a directory tree. Pass exclude to skip a named subdirectory (e.g. "TestResults").
+    private static void CopyDirectory(string src, string dest, string? exclude = null)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
+        foreach (var dir in Directory.GetDirectories(src))
+        {
+            if (Path.GetFileName(dir) == exclude) continue;
+            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)), exclude);
+        }
     }
 
     // ==========================================================================
@@ -207,5 +254,74 @@ public class TestRunnerToolsTests : PluginTestBase
     {
         var result = await TestRunnerTools.GetTestSummary("/nonexistent/path/results.trx");
         Assert.Equal(0, result.Total);
+    }
+
+    // ==========================================================================
+    // Scenario: CI shows intermittent failures — developer uses detect_flaky_tests
+    // ==========================================================================
+
+    [Fact]
+    public async Task DetectFlakyTests_WithAlternatingTest_IdentifiesItAsFlaky()
+    {
+        // SampleFlakyProject has one test that alternates pass/fail each dotnet test invocation.
+        // Running it 4 times guarantees 2 passes and 2 failures → detected as flaky.
+        var result = await TestRunnerTools.DetectFlakyTests(
+            SamplePath("SampleFlakyProject"),
+            runs: 4);
+
+        Assert.Equal(4, result.TotalRuns);
+        Assert.Single(result.FlakyTests);
+        Assert.Contains(result.FlakyTests, f => f.TestName.Contains("Flaky_AlternatesEachRun"));
+    }
+
+    [Fact]
+    public async Task DetectFlakyTests_FlakyTest_ReportsCorrectPassFailCounts()
+    {
+        var result = await TestRunnerTools.DetectFlakyTests(
+            SamplePath("SampleFlakyProject"),
+            runs: 4);
+
+        var flaky = result.FlakyTests.Single(f => f.TestName.Contains("Flaky_AlternatesEachRun"));
+
+        // 4 runs alternating → 2 passes, 2 failures
+        Assert.Equal(2, flaky.Passes);
+        Assert.Equal(2, flaky.Failures);
+    }
+
+    [Fact]
+    public async Task DetectFlakyTests_StableTests_DoNotAppearInFlakyList()
+    {
+        var result = await TestRunnerTools.DetectFlakyTests(
+            SamplePath("SampleFlakyProject"),
+            runs: 4);
+
+        // StablePass always passes → consistent → not flaky
+        Assert.DoesNotContain(result.FlakyTests, f => f.TestName.Contains("StablePass"));
+        // StableFail always fails → consistently broken, not flaky
+        Assert.DoesNotContain(result.FlakyTests, f => f.TestName.Contains("StableFail"));
+    }
+
+    [Fact]
+    public async Task DetectFlakyTests_FlakyTest_IncludesFailureMessage()
+    {
+        var result = await TestRunnerTools.DetectFlakyTests(
+            SamplePath("SampleFlakyProject"),
+            runs: 4);
+
+        var flaky = result.FlakyTests.Single(f => f.TestName.Contains("Flaky_AlternatesEachRun"));
+
+        Assert.NotNull(flaky.SampleFailureMessage);
+        Assert.Contains("Odd-numbered invocation", flaky.SampleFailureMessage);
+    }
+
+    [Fact]
+    public async Task DetectFlakyTests_CleanProject_ReportsNoFlakyTests()
+    {
+        var result = await TestRunnerTools.DetectFlakyTests(
+            SamplePath("SampleTestProject"),
+            runs: 3);
+
+        Assert.Empty(result.FlakyTests);
+        Assert.True(result.TotalTests > 0, "Should have found tests in SampleTestProject");
     }
 }

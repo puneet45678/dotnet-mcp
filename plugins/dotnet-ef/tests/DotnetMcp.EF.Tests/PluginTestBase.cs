@@ -4,7 +4,10 @@ namespace DotnetMcp.EF.Tests;
 
 public abstract class PluginTestBase
 {
-    private static bool? _efAvailable;
+    // Thread-safe: Lazy<Task<T>> runs the factory exactly once even under concurrent access.
+    private static readonly Lazy<Task<bool>> _efAvailable = new(
+        () => ProcessRunner.RunAsync("dotnet", "ef --version")
+                           .ContinueWith(t => t.Result.Success));
 
     protected static string SamplePath(string projectName)
     {
@@ -20,16 +23,14 @@ public abstract class PluginTestBase
             $"Could not locate samples/{projectName}. Run tests from the repo root.");
     }
 
-    protected static async Task<bool> EFAvailableAsync()
-    {
-        if (_efAvailable.HasValue) return _efAvailable.Value;
-        var result = await ProcessRunner.RunAsync("dotnet", "ef --version");
-        _efAvailable = result.Success;
-        return _efAvailable.Value;
-    }
+    // Returns true if the dotnet-ef global tool is installed.
+    // Safe to call concurrently — the version check runs exactly once.
+    protected static Task<bool> EFAvailableAsync() => _efAvailable.Value;
 
-    // Copies a sample project to a temp directory and restores it.
-    // The caller is responsible for deleting the directory.
+    // Copies a sample project to a temp directory.
+    // NuGet packages are already warm after the class fixture pre-restores them,
+    // so the restore here completes from the local cache in <1 s.
+    // The caller MUST delete the returned directory in a finally block.
     protected static async Task<string> CreateTempProjectAsync(string sampleName)
     {
         var src = SamplePath(sampleName);

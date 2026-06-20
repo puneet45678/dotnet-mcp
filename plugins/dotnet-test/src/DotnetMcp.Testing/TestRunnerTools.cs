@@ -4,6 +4,8 @@ using DotnetMcp.Core.Models;
 using DotnetMcp.Core.Utilities;
 using ModelContextProtocol.Server;
 
+
+
 namespace DotnetMcp.Testing;
 
 [McpServerToolType]
@@ -21,13 +23,27 @@ public static class TestRunnerTools
     }
 
     [McpServerTool(Name = "run_failed_tests", Idempotent = true, Destructive = false)]
-    [Description("Re-run only the tests that failed in the last test run.")]
+    [Description("Re-run only the tests that failed in the last run_tests call for this project. Returns 'No previously failed tests' if the project has a clean run history.")]
     public static async Task<TestRunResult> RunFailedTests(
         [Description("Path to the .csproj, .sln, or directory to test")] string projectPath,
         [Description("Build configuration: Debug or Release (default: Debug)")] string configuration = "Debug",
         CancellationToken cancellationToken = default)
     {
-        return await RunWithTrx(projectPath, filter: "Outcome=Failed", configuration, cancellationToken);
+        // Read the TRX that run_tests persisted for this project
+        var persistentTrx = PersistentTrxPath(projectPath);
+        if (!File.Exists(persistentTrx))
+            return new TestRunResult { Success = true, NoHistory = true };
+
+        var previous = ParseTrx(persistentTrx, filter: null);
+        if (previous.Failures.Count == 0)
+            return new TestRunResult { Success = true, Total = 0, NoPreviousFailures = true };
+
+        // Build a FullyQualifiedName filter from the failed names so it works with all frameworks
+        var filterParts = previous.Failures
+            .Select(f => $"FullyQualifiedName~{f.TestName.Replace(" ", "_")}");
+        var filter = string.Join("|", filterParts);
+
+        return await RunWithTrx(projectPath, filter, configuration, cancellationToken);
     }
 
     [McpServerTool(Name = "list_tests", ReadOnly = true, Destructive = false)]
@@ -77,6 +93,58 @@ public static class TestRunnerTools
         }
     }
 
+    [McpServerTool(Name = "detect_flaky_tests", Idempotent = true, Destructive = false)]
+    [Description("Run the test suite multiple times and identify tests with inconsistent results. A test is considered flaky if it passes in some runs and fails in others.")]
+    public static async Task<FlakeResult> DetectFlakyTests(
+        [Description("Path to the .csproj, .sln, or directory to test")] string projectPath,
+        [Description("Number of times to run the suite (default: 5, min: 2, max: 20)")] int runs = 5,
+        [Description("Optional test filter to narrow which tests are exercised")] string? filter = null,
+        [Description("Build configuration: Debug or Release (default: Debug)")] string configuration = "Debug",
+        CancellationToken cancellationToken = default)
+    {
+        runs = Math.Clamp(runs, 2, 20);
+
+        // Build once up-front so the repeated runs skip compilation
+        await ProcessRunner.RunAsync(
+            "dotnet",
+            $"build \"{projectPath}\" --configuration {configuration} -q",
+            cancellationToken: cancellationToken);
+
+        // Collect per-test outcomes for each run: testName → [(outcome, message)]
+        var history = new Dictionary<string, List<(string Outcome, string? Message)>>();
+
+        for (int i = 0; i < runs; i++)
+        {
+            var results = await RunAndGetOutcomes(projectPath, filter, configuration, cancellationToken);
+            foreach (var (testName, outcome, message) in results)
+            {
+                if (!history.TryGetValue(testName, out var list))
+                    history[testName] = list = [];
+                list.Add((outcome, message));
+            }
+        }
+
+        var flaky = history
+            .Where(kv => kv.Value.Any(r => r.Outcome == "Passed") &&
+                         kv.Value.Any(r => r.Outcome == "Failed"))
+            .Select(kv => new FlakyTest
+            {
+                TestName             = kv.Key,
+                Passes               = kv.Value.Count(r => r.Outcome == "Passed"),
+                Failures             = kv.Value.Count(r => r.Outcome == "Failed"),
+                SampleFailureMessage = kv.Value.FirstOrDefault(r => r.Outcome == "Failed").Message,
+            })
+            .OrderByDescending(t => t.Failures)
+            .ToList();
+
+        return new FlakeResult
+        {
+            TotalRuns  = runs,
+            TotalTests = history.Count,
+            FlakyTests = flaky,
+        };
+    }
+
     [McpServerTool(Name = "get_test_summary", ReadOnly = true, Destructive = false)]
     [Description("Parse an existing TRX test results file and return a structured pass/fail/skip summary with failure details.")]
     public static Task<TestRunResult> GetTestSummary(
@@ -104,14 +172,72 @@ public static class TestRunnerTools
 
             await ProcessRunner.RunAsync("dotnet", args, cancellationToken: ct);
 
-            return File.Exists(trxPath)
-                ? ParseTrx(trxPath, filter)
-                : new TestRunResult { Success = false };
+            if (!File.Exists(trxPath))
+                return new TestRunResult { Success = false };
+
+            var result = ParseTrx(trxPath, filter);
+
+            // Persist a stable TRX for run_failed_tests — only when running without a filter
+            // so we don't overwrite the baseline with a partial re-run.
+            if (string.IsNullOrWhiteSpace(filter))
+            {
+                try
+                {
+                    var persistentTrx = PersistentTrxPath(projectPath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(persistentTrx)!);
+                    File.Copy(trxPath, persistentTrx, overwrite: true);
+                }
+                catch { /* best-effort */ }
+            }
+
+            return result;
         }
         finally
         {
             try { File.Delete(trxPath); } catch { }
         }
+    }
+
+    // Runs the tests once and returns a list of (testName, outcome, failureMessage) tuples.
+    // Uses --no-build because DetectFlakyTests builds up-front and re-uses the output.
+    private static async Task<List<(string TestName, string Outcome, string? Message)>>
+        RunAndGetOutcomes(string projectPath, string? filter, string configuration, CancellationToken ct)
+    {
+        var trxPath = Path.Combine(Path.GetTempPath(), $"dotnet-mcp-flake-{Guid.NewGuid():N}.trx");
+        try
+        {
+            var args = $"test \"{projectPath}\" --configuration {configuration} --no-build" +
+                       $" --logger \"trx;LogFileName={trxPath}\"";
+            if (!string.IsNullOrWhiteSpace(filter))
+                args += $" --filter \"{filter}\"";
+
+            await ProcessRunner.RunAsync("dotnet", args, cancellationToken: ct);
+
+            if (!File.Exists(trxPath)) return [];
+
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            var doc = XDocument.Load(trxPath);
+            return doc.Descendants(ns + "UnitTestResult")
+                .Select(r => (
+                    TestName: r.Attribute("testName")?.Value ?? "",
+                    Outcome:  r.Attribute("outcome")?.Value  ?? "Unknown",
+                    Message:  r.Descendants(ns + "Message").FirstOrDefault()?.Value?.Trim()
+                ))
+                .Where(r => r.TestName.Length > 0)
+                .ToList();
+        }
+        finally
+        {
+            try { File.Delete(trxPath); } catch { /* best-effort */ }
+        }
+    }
+
+    // Returns a stable TRX path scoped to this project for run_failed_tests to consume.
+    private static string PersistentTrxPath(string projectPath)
+    {
+        // Resolve to a directory: .csproj → its directory, directory → itself
+        var dir = File.Exists(projectPath) ? Path.GetDirectoryName(projectPath)! : projectPath;
+        return Path.Combine(dir, "TestResults", "dotnet-mcp-last-run.trx");
     }
 
     private static TestRunResult ParseTrx(string trxPath, string? filter)

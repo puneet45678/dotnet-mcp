@@ -1,7 +1,12 @@
 namespace DotnetMcp.EF.Tests;
 
-public class EFToolsTests : PluginTestBase
+// EFProjectFixture pre-warms the NuGet cache once so each test's CreateTempProjectAsync
+// completes its restore from the local cache rather than hitting the network.
+[Collection("EF Integration")]
+public class EFToolsTests : PluginTestBase, IClassFixture<EFProjectFixture>
 {
+    public EFToolsTests(EFProjectFixture _) { /* fixture runs InitializeAsync before any test */ }
+
     // All tests that invoke dotnet ef skip gracefully when the global tool is not installed.
     // Install with: dotnet tool install --global dotnet-ef
 
